@@ -19,7 +19,7 @@ done
 wv_load_config "${config:-${WV_CONFIG:-}}"
 wv_valid_name "$VPN_NAME" && wv_valid_name "$SERVER_IF" || { echo "invalid VPN_NAME/SERVER_IF" >&2; exit 1; }
 conf="$WV_AWG_DIR/$VPN_NAME.conf"
-rule="$WV_POLKIT_DIR/50-workstation-vpn-$VPN_NAME.rules"
+rule="$WV_POLKIT_RULE"
 ssh_args=(-o BatchMode=yes -o ConnectTimeout=10)
 [[ -n "$SSH_KEY" ]] && ssh_args+=(-i "${SSH_KEY/#\~/$HOME}")
 say() { printf '\033[1m==>\033[0m %s\n' "$*"; }

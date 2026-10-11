@@ -31,7 +31,7 @@ install.sh ── ssh ──> reads: server public key, address, used peer IPs,
            ── /etc/amnezia/amneziawg/<VPN_NAME>.conf          (root, 600)
            ── ssh ──> awg set <if> peer <pub> allowed-ips <ip>/32   (live, no restart)
                       + [Peer] block appended to <if>.conf    (backup kept)
-           ── /etc/polkit-1/rules.d/50-workstation-vpn-<VPN_NAME>.rules
+           ── /etc/polkit-1/rules.d/50-workstation-vpn.rules
            ── ~/.local/bin/{vpn-switch,vpn-tray}, ~/.local/share/workstation-vpn/,
               ~/.config/autostart/vpn-tray.desktop
 ```

@@ -6,7 +6,7 @@ WV_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/workstation-vpn"
 WV_BIN_DIR="$HOME/.local/bin"
 WV_AUTOSTART="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/vpn-tray.desktop"
 WV_AWG_DIR=/etc/amnezia/amneziawg
-WV_POLKIT_DIR=/etc/polkit-1/rules.d
+WV_POLKIT_RULE=/etc/polkit-1/rules.d/50-workstation-vpn.rules   # one tunnel per machine
 # Obfuscation parameters copied from the server interface (AmneziaWG 1.x and 2.x names).
 WV_OBF_REGEX='^(Jc|Jmin|Jmax|S[1-4]|H[1-4]|I[1-5]|J[1-3]|Itime)[[:space:]]*='
 

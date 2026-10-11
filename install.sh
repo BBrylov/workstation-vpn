@@ -25,7 +25,7 @@ for name in "$VPN_NAME" "$SERVER_IF" "$CLIENT_NAME"; do
     wv_valid_name "$name" || { echo "invalid name '$name' (allowed: A-Z a-z 0-9 . _ -, up to 32)" >&2; exit 1; }
 done
 conf="$WV_AWG_DIR/$VPN_NAME.conf"
-rule="$WV_POLKIT_DIR/50-workstation-vpn-$VPN_NAME.rules"
+rule="$WV_POLKIT_RULE"
 ssh_args=(-o BatchMode=yes -o ConnectTimeout=10)
 [[ -n "$SSH_KEY" ]] && ssh_args+=(-i "${SSH_KEY/#\~/$HOME}")
 tmp=$(mktemp -d)

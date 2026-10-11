@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""Tray indicator for the workstation-vpn tunnel: the icon shows the real unit state, the menu toggles it."""
+import os
+import shlex
+import subprocess
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+try:  # Arch / KDE: libappindicator; Debian / Ubuntu: Ayatana
+    gi.require_version("AppIndicator3", "0.1")
+    from gi.repository import AppIndicator3  # noqa: E402
+except (ValueError, ImportError):
+    gi.require_version("AyatanaAppIndicator3", "0.1")
+    from gi.repository import AyatanaAppIndicator3 as AppIndicator3  # noqa: E402
+from gi.repository import GLib, Gtk  # noqa: E402
+
+HOME = Path.home()
+CONFIG = Path(os.environ.get("WV_CONFIG") or
+              Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / "workstation-vpn" / "site.env")
+DATA = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local" / "share")) / "workstation-vpn"
+SWITCH = str(HOME / ".local" / "bin" / "vpn-switch")
+POLL_SECONDS = 3
+
+RU = os.environ.get("LANG", "").startswith("ru")
+T = {
+    "on": "включён" if RU else "on",
+    "off": "выключен" if RU else "off",
+    "turn_on": "Включить" if RU else "Turn on",
+    "turn_off": "Выключить" if RU else "Turn off",
+}
+
+
+def read_config(path: Path) -> dict[str, str]:
+    """KEY=VALUE lines of site.env (shell syntax, comments allowed)."""
+    values: dict[str, str] = {}
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, raw = line.partition("=")
+        parts = shlex.split(raw, comments=True)
+        values[key.strip()] = parts[0] if parts else ""
+    return values
+
+
+class Tray:
+    def __init__(self, unit: str, label: str) -> None:
+        self.unit = unit
+        self.title = f"VPN {label}"
+        self.ind = AppIndicator3.Indicator.new(
+            "workstation-vpn", "vpn-off", AppIndicator3.IndicatorCategory.SYSTEM_SERVICES)
+        self.ind.set_icon_theme_path(str(DATA / "icons"))
+        self.ind.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
+        self.ind.set_title(self.title)
+        menu = Gtk.Menu()
+        self.state_item = Gtk.MenuItem(label="")
+        self.state_item.set_sensitive(False)
+        self.toggle_item = Gtk.MenuItem(label="")
+        self.toggle_item.connect("activate", self.on_toggle)
+        for item in (self.state_item, Gtk.SeparatorMenuItem(), self.toggle_item):
+            menu.append(item)
+        menu.show_all()
+        self.ind.set_menu(menu)
+        self.ind.set_secondary_activate_target(self.toggle_item)  # middle click toggles too
+        self.active: bool | None = None
+        self.refresh()
+        GLib.timeout_add_seconds(POLL_SECONDS, self.refresh)
+
+    def is_active(self) -> bool:
+        return subprocess.run(["systemctl", "is-active", "-q", self.unit]).returncode == 0
+
+    def refresh(self) -> bool:
+        active = self.is_active()
+        if active != self.active:
+            self.active = active
+            state = T["on"] if active else T["off"]
+            self.ind.set_icon_full("vpn-on" if active else "vpn-off", f"{self.title} {state}")
+            self.state_item.set_label(f"{self.title}: {state}")
+            self.toggle_item.set_label(f"{T['turn_off'] if active else T['turn_on']} {self.title}")
+        return True
+
+    def on_toggle(self, _item) -> None:
+        self.toggle_item.set_sensitive(False)
+        proc = subprocess.Popen([SWITCH, "toggle"])
+        GLib.child_watch_add(GLib.PRIORITY_DEFAULT, proc.pid, self.on_done)
+
+    def on_done(self, _pid, _status) -> None:
+        self.toggle_item.set_sensitive(True)
+        self.refresh()
+
+
+if __name__ == "__main__":
+    cfg = read_config(CONFIG)
+    Tray(f"awg-quick@{cfg.get('VPN_NAME') or 'awgvpn'}.service", cfg.get("VPN_LABEL") or "VPN")
+    Gtk.main()

@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Switch the AmneziaWG tunnel: on | off | toggle | status. Other VPNs are left alone.
+# No sudo: start/stop is allowed by the polkit rule that install.sh puts in place.
+set -uo pipefail
+
+here="$(dirname "$(readlink -f "$0")")"
+for lib in "$here/../lib/common.sh" "${XDG_DATA_HOME:-$HOME/.local/share}/workstation-vpn/common.sh"; do
+    [[ -f "$lib" ]] && { . "$lib"; break; }
+done
+declare -F wv_load_config >/dev/null || { echo "workstation-vpn: common.sh not found" >&2; exit 1; }
+wv_load_config "${WV_CONFIG:-}" || exit 1
+
+if [[ "${LANG:-}" == ru* ]]; then
+    M_ON="включён"; M_OFF="выключен"; M_IP="Внешний IP"; M_NOLINK="нет связи"
+    M_FAIL_START="Не удалось запустить"; M_FAIL_STOP="Не удалось остановить"
+    M_PROBLEM="включён, но проблема"; M_EXPECTED="ожидался"; M_ERROR="ошибка"
+else
+    M_ON="on"; M_OFF="off"; M_IP="Public IP"; M_NOLINK="no connectivity"
+    M_FAIL_START="Failed to start"; M_FAIL_STOP="Failed to stop"
+    M_PROBLEM="on, but something is wrong"; M_EXPECTED="expected"; M_ERROR="error"
+fi
+TITLE="VPN $VPN_LABEL"
+
+notify() { notify-send -a "$TITLE" -i "$WV_DATA_DIR/icons/vpn-$1.svg" "$2" "$3" 2>/dev/null || echo "$2: $3"; }
+
+egress_ip() {   # public IP as seen from outside; retries while the tunnel settles
+    local ip
+    for _ in 1 2 3 4 5; do
+        ip=$(curl -4 -s --max-time 4 https://ifconfig.me) && [[ -n "$ip" ]] && { echo "$ip"; return; }
+    done
+    echo "$M_NOLINK"
+}
+
+on() {
+    systemctl start "$WV_UNIT" || { notify off "$TITLE: $M_ERROR" "$M_FAIL_START $WV_UNIT"; return 1; }
+    local ip; ip=$(egress_ip)
+    if [[ -z "$EXPECT_IP" || "$ip" == "$EXPECT_IP" ]]; then notify on "$TITLE $M_ON" "$M_IP $ip"
+    else notify off "$TITLE $M_PROBLEM" "$M_IP: $ip ($M_EXPECTED $EXPECT_IP)"; return 1; fi
+}
+
+off() {
+    systemctl stop "$WV_UNIT" || { notify on "$TITLE: $M_ERROR" "$M_FAIL_STOP $WV_UNIT"; return 1; }
+    notify off "$TITLE $M_OFF" "$M_IP $(egress_ip)"
+}
+
+case "${1:-toggle}" in
+    on) on ;;
+    off) off ;;
+    toggle) if systemctl is-active -q "$WV_UNIT"; then off; else on; fi ;;
+    status) echo "$WV_UNIT: $(systemctl is-active "$WV_UNIT")"; echo "egress: $(egress_ip)" ;;
+    *) echo "usage: vpn-switch [on|off|toggle|status]" >&2; exit 2 ;;
+esac
